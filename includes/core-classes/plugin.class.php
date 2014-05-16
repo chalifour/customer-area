@@ -29,7 +29,7 @@ class CUAR_Plugin {
 	}
 	
 	public function run() {		
-		add_action( 'plugins_loaded', array( &$this, 'load_textdomain' ), 3 );
+		add_action( 'plugins_loaded', array( &$this, 'load_textdomain' ), 4 );
 		
 		add_action( 'plugins_loaded', array( &$this, 'load_settings' ), 5 );
 		add_action( 'plugins_loaded', array( &$this, 'load_addons' ), 10 );
@@ -90,11 +90,8 @@ class CUAR_Plugin {
 				$this->get_admin_theme_url() . '/style.css' );
 		} else if ( $this->get_option( CUAR_Settings::$OPTION_INCLUDE_CSS ) ) {
 			wp_enqueue_style(
-					'cuar.frontend',
-					$this->get_frontend_theme_url() . '/style.css',
-					array( 'dashicons' ), 
-					$this->get_version()
-				);
+				'cuar.frontend',
+				$this->get_frontend_theme_url() . '/style.css' );
 		}
 	}
 	
@@ -108,10 +105,10 @@ class CUAR_Plugin {
 		if ( !isset( $active_version ) ) $active_version = '1.4.0';
 		
 		if ( CUAR_DEBUG_UPGRADE_PROCEDURE_FROM_VERSION!==FALSE ) {
-			do_action( 'cuar/core/on-plugin-update', CUAR_DEBUG_UPGRADE_PROCEDURE_FROM_VERSION, $current_version );
+			do_action( 'cuar_version_upgraded', CUAR_DEBUG_UPGRADE_PROCEDURE_FROM_VERSION, $current_version );
 		} else {
 			if ( $active_version != $current_version ) {
-				do_action( 'cuar/core/on-plugin-update', $active_version, $current_version );
+				do_action( 'cuar_version_upgraded', $active_version, $current_version );
 			} 
 			if ( empty( $active_version ) || $active_version != $current_version ) {
 				$this->settings->update_option( CUAR_Settings::$OPTION_CURRENT_VERSION, $current_version );
@@ -227,7 +224,7 @@ class CUAR_Plugin {
 	public function get_template_file_path( $default_root, $filename, $sub_directory = '', $fallback_filename = '' ) {		
 		$relative_path = ( !empty( $sub_directory ) ) ? trailingslashit( $sub_directory ) . $filename : $filename;
 		
-		$possible_locations = apply_filters( 'cuar/core/ui/template-directories', 
+		$possible_locations = apply_filters( 'cuar_available_template_file_locations', 
 				array(
 					untrailingslashit(WP_CONTENT_DIR) . '/customer-area',
 					untrailingslashit(get_stylesheet_directory()) . '/customer-area',
@@ -290,7 +287,7 @@ class CUAR_Plugin {
 			}
 		}
 		
-		if ( $this->get_option( CUAR_Settings::$OPTION_DEBUG_TEMPLATES ) ) {
+		if ( $this->get_option( CUAR_Settings::$OPTION_DEBUG_TEMPLATES && !is_admin() ) ) {
 			echo "\n<!-- CUAR TEMPLATE < $filename > REQUESTED BUT NOT FOUND (WILL NOT BE USED) -->\n";
 		}
 		
@@ -334,7 +331,7 @@ class CUAR_Plugin {
 	}
 	
 	public function login_then_redirect_to_url( $redirect_to='' ) {
-		$login_url = apply_filters( 'cuar/core/login-url', null, $redirect_to );		
+		$login_url = apply_filters( 'cuar_login_url', null, $redirect_to );		
 		if ( $login_url==null ) {
 			$login_url = wp_login_url( $redirect_to );
 		}	
@@ -415,7 +412,7 @@ class CUAR_Plugin {
 		echo '</div>';
 	}
 
-	public static $OPTION_STATUS_SECTIONS = 'cuar/core/status/sections';
+	public static $OPTION_STATUS_SECTIONS = 'cuar_status_sections';
 	public static $OPTION_IGNORE_WARNINGS = 'cuar_ignore_warnings';
 	
 	/*------- SETTINGS ----------------------------------------------------------------------------------------------*/
@@ -465,9 +462,9 @@ class CUAR_Plugin {
 	 * This function offers a way for addons to do their stuff after this plugin is loaded
 	 */
 	public function load_addons() {		
-		do_action( 'cuar/core/addons/before-init', $this );
-		do_action( 'cuar/core/addons/init', $this );
-		do_action( 'cuar/core/addons/after-init', $this );
+		do_action( 'cuar_before_addons_init', $this );
+		do_action( 'cuar_addons_init', $this );
+		do_action( 'cuar_after_addons_init', $this );
 
 		// Check add-on versions
 		if ( is_admin() ) {
@@ -606,10 +603,8 @@ class CUAR_Plugin {
 	 * 
 	 * @param string $id The ID for the external library
 	 */
-	public function enable_library( $library_id ) {
-		do_action( 'cuar/core/libraries/before-enable?id=' . $library_id );
-		
-		switch ( $library_id ) {
+	public function enable_library( $id ) {
+		switch ( $id ) {
 			case 'jquery.select2': {
 				wp_enqueue_script( 'jquery.select2', CUAR_PLUGIN_URL . 'libs/select2/select2.min.js', array('jquery'), $this->get_version() );
 
@@ -658,10 +653,8 @@ class CUAR_Plugin {
 			break;
 			
 			default:
-				do_action( 'cuar/core/libraries/enable?id=' . $library_id );
+				do_action( 'cuar_enable_library', $library_id );
 		}
-		
-		do_action( 'cuar/core/libraries/after-enable?id=' . $library_id );
 	}
 
 	/*------- TEMPLATES ---------------------------------------------------------------------------------------------*/
@@ -680,7 +673,7 @@ class CUAR_Plugin {
 		}
 
 		include( CUAR_PLUGIN_DIR . '/includes/core-addons/status/template-finder.class.php' );
-		$dirs_to_scan = apply_filters( 'cuar/core/status/directories-to-scan', array( CUAR_PLUGIN_DIR => __( 'Customer Area', 'cuar' ) ) );
+		$dirs_to_scan = apply_filters( 'cuar_hooks_status_directories', array( CUAR_PLUGIN_DIR => __( 'Customer Area', 'cuar' ) ) );
 		
 		$outdated_templates = array();		
 		foreach ( $dirs_to_scan as $dir => $title ) {
@@ -712,44 +705,12 @@ class CUAR_Plugin {
 	 * Tells which post types are private (shown on the customer area page)
 	 * @return array
 	 */
-	public function get_content_post_types() {
-		return apply_filters( 'cuar/core/post-types/content', array() );
+	public function get_private_post_types() {
+		return apply_filters('cuar_private_post_types', array());
 	}	
 	
-	/**
-	 * Get the content types descriptors. Each descriptor is an array with:
-	 * - 'label-plural'				- plural label
-	 * - 'label-singular'			- singular label
-	 * - 'content-page-addon'		- content page addon associated to this type 
-	 * 
-	 * @return array keys are post_type and values are arrays as described above
-	 */
-	public function get_content_types() {
-		return apply_filters( 'cuar/core/types/content', array() );
-	}	
-	
-	/**
-	 * Tells which container post types are available
-	 * @return array
-	 */
-	public function get_container_post_types() {
-		return apply_filters( 'cuar/core/post-types/container', array() );
-	}	
-	
-	/**
-	 * Get the post type descriptors. Each descriptor is an array with:
-	 * - 'label'					- plural label
-	 * - 'label-singular'			- singular label
-	 * - 'container-page-slug'		- main page slug associated to this type 
-	 * 
-	 * @return array
-	 */
-	public function get_container_types() {
-		return apply_filters( 'cuar/core/types/container', array() );
-	}	
-		
 	public function get_default_wp_editor_settings() {
-		return apply_filters( 'cuar/core/ui/default-wp-editor-settings', array(
+		return apply_filters( 'cuar_default_wp_editor_settings', array(
 				'textarea_rows'	=> 5,
 				'editor_class'	=> 'form-control',
 				'quicktags'		=> false,
@@ -760,4 +721,4 @@ class CUAR_Plugin {
 	}
 }
 
-endif; // if (!class_exists('CUAR_Plugin')) :
+endif; // if (!class_exists('CUAR_Plugin')) :
