@@ -156,7 +156,7 @@ class CUAR_CustomerPagesAddOn extends CUAR_AddOn {
 		} else {
 			$page_id = isset( $settings_array[$option_name] ) ? $settings_array[$option_name] : -1;
 		}
-		return $page_id<=0 ? false : $page_id;
+		return $page_id<=0 ? false : ( ( function_exists( 'icl_object_id' ) ) ? icl_object_id( $page_id, 'page', true ) : $page_id );
 	}
 	
 	private function set_page_id( $slug, $post_id ) {
@@ -170,7 +170,7 @@ class CUAR_CustomerPagesAddOn extends CUAR_AddOn {
 		if ( empty( $slug ) ) return false;
 		
 		$page_id = $this->plugin->get_option( $this->get_page_option_name( $slug ), -1 );
-		return $page_id<0 ? false : get_permalink( $page_id );
+		return $page_id<0 ? false : get_permalink( ( ( function_exists( 'icl_object_id' ) ) ? icl_object_id( $page_id, 'page', true ) : $page_id ) );
 	}
 	
 	public function is_auto_menu_on_single_private_content_pages_enabled() {
